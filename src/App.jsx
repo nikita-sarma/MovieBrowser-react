@@ -23,41 +23,90 @@ const App = () => {
   const [isloading, setIsLoading] = useState(false);
 
 
-  const fetchMovies = async () => {
-    setIsLoading(true);
-    setErrorMessage('');
-    try {
+const fetchMovies = async (query = '') => {
+  setIsLoading(true);
+  setErrorMessage('');
 
-      const endpoint = `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
+  try {
+    const endpoint = query
+      ? `${API_BASE_URL}/search/movie?query=${encodeURIComponent(query)}`
+      : `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
 
-      const response = await fetch(endpoint, API_OPTIONS);
+    const response = await fetch(endpoint, API_OPTIONS);
 
-      if (!response.ok) {
-        throw new Error('failed to fetch movies');
-      }
-
-      const data = await response.json();
-
-      if (data.response === 'false') {
-        setErrorMessage('failed to fetch movies.');
-        setMovieList([]);
-        return;
-      }
-
-      setMovieList(data.results || []);
-
-  }catch (error) {
-      console.error(`Error fetching movies: ${error}`);
-      setErrorMessage('Failed to fetch movies. Please try again later.');
-    } finally {
-      setIsLoading(false);
+    if (!response.ok) {
+      throw new Error('Failed to fetch movies');
     }
+
+    const data = await response.json();
+    setMovieList(data.results || []);
+  } catch (error) {
+    console.error(`Error fetching movies: ${error}`);
+    setErrorMessage('Failed to fetch movies. Please try again later.');
+  } finally {
+    setIsLoading(false);
   }
+};
+
 
   useEffect(() => {
     fetchMovies();
 
   },[]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const performSearch = async () => {
+      if (!searchTerm) {
+        // empty search -> restore default list
+        fetchMovies();
+        return;
+      }
+
+      setIsLoading(true);
+      setErrorMessage('');
+
+      try {
+        const endpoint = `${API_BASE_URL}/search/movie?query=${encodeURIComponent(
+          searchTerm
+        )}`;
+
+        const response = await fetch(endpoint, { ...API_OPTIONS, signal: controller.signal });
+
+        if (!response.ok) {
+          throw new Error('failed to fetch search results');
+        }
+
+        const data = await response.json();
+        setMovieList(data.results || []);
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        console.error(`Error searching movies: ${error}`);
+        setErrorMessage('Failed to search movies. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      performSearch();
+    }, 350);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [searchTerm]);
+
+  useEffect(() => {
+  const timeout = setTimeout(() => {
+    fetchMovies(searchTerm);
+  }, 500);
+
+  return () => clearTimeout(timeout);
+}, [searchTerm]);
+
 
   return (
     <main>
